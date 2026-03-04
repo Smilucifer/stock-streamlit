@@ -1,144 +1,450 @@
 """
-数据获取模块 - 通过 akshare 获取 A 股数据
+数据获取模块 - 通过 Tushare 获取 A 股数据
+自定义 API 地址，Token 已内置
 """
-import akshare as ak
+import requests
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 
+# ──────────────────────────────────────────
+# Tushare 自定义配置
+# ──────────────────────────────────────────
+TUSHARE_API_URL = "http://tushare.nlink.vip"
+TUSHARE_TOKEN = "b007202603040326140ovpip78movej0o9"
 
-def get_stock_kline(symbol: str, period: str = "daily", adjust: str = "qfq") -> pd.DataFrame:
-    """获取股票K线数据"""
+
+def _ts_query(api_name: str, params: dict = None, fields: str = "") -> pd.DataFrame:
+    """通用 Tushare HTTP 请求封装"""
+    payload = {
+        "api_name": api_name,
+        "token": TUSHARE_TOKEN,
+        "params": params or {},
+        "fields": fields,
+    }
     try:
-        df = ak.stock_zh_a_hist(
-            symbol=symbol,
-            period=period,
-            start_date=(datetime.now() - timedelta(days=365)).strftime("%Y%m%d"),
-            end_date=datetime.now().strftime("%Y%m%d"),
-            adjust=adjust,
-        )
-        return df
-    except Exception as e:
+        resp = requests.post(TUSHARE_API_URL, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("code") != 0:
+            return pd.DataFrame()
+        fields_list = data.get("data", {}).get("fields", [])
+        items = data.get("data", {}).get("items", [])
+        if not fields_list or not items:
+            return pd.DataFrame()
+        return pd.DataFrame(items, columns=fields_list)
+    except Exception:
         return pd.DataFrame()
 
 
-def get_stock_info(symbol: str) -> dict:
-    """获取股票基本信息"""
-    info = {}
+def _to_ts_code(symbol: str) -> str:
+    """纯数字代码 -> tushare ts_code 格式"""
+    if symbol.startswith(("6", "9")):
+        return f"{symbol}.SH"
+    else:
+        return f"{symbol}.SZ"
+
+
+def _format_yi(val):
+    """数值转亿元显示"""
+    if val is None or pd.isna(val):
+        return "--"
     try:
-        df = ak.stock_individual_info_em(symbol=symbol)
-        if not df.empty:
-            for _, row in df.iterrows():
-                info[row.iloc[0]] = row.iloc[1]
-    except Exception:
-        pass
+        v = float(val)
+        if abs(v) >= 1e8:
+            return f"{v / 1e8:.2f}亿"
+        elif abs(v) >= 1e4:
+            return f"{v / 1e4:.2f}万"
+        else:
+            return f"{v:.2f}"
+    except (ValueError, TypeError):
+        return "--"
+
+
+def _format_market_cap(val):
+    """万元 -> 可读格式"""
+    if val is None or pd.isna(val):
+        return "--"
+    try:
+        v = float(val)
+        if v >= 10000:
+            return f"{v / 10000:.2f}亿"
+        else:
+            return f"{v:.2f}万"
+    except (ValueError, TypeError):
+        return "--"
+
+
+# ──────────────────────────────────────────
+# K线数据
+# ──────────────────────────────────────────
+def get_stock_kline(symbol: str) -> pd.DataFrame:
+    """获取近一年日K线（前复权），包含最新交易日数据"""
+    ts_code = _to_ts_code(symbol)
+    now = datetime.now()
+    end = now.strftime("%Y%m%d")
+    start = (now - timedelta(days=365)).strftime("%Y%m%d")
+
+    df = _ts_query("daily", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    if df.empty:
+        return df
+
+    # 获取复权因子做前复权
+    adj_df = _ts_query("adj_factor", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+
+    if not adj_df.empty and "adj_factor" in adj_df.columns:
+        df = df.merge(adj_df[["trade_date", "adj_factor"]], on="trade_date", how="left")
+        latest_factor = df["adj_factor"].iloc[0]  # 最新日期的因子（df默认倒序）
+        if latest_factor and latest_factor != 0:
+            ratio = df["adj_factor"] / latest_factor
+            for col in ["open", "high", "low", "close"]:
+                if col in df.columns:
+                    df[col] = (df[col] * ratio).round(2)
+
+    df = df.sort_values("trade_date").reset_index(drop=True)
+
+    df = df.rename(columns={
+        "trade_date": "日期",
+        "open": "开盘",
+        "high": "最高",
+        "low": "最低",
+        "close": "收盘",
+        "vol": "成交量",
+        "amount": "成交额",
+        "pct_chg": "涨跌幅",
+        "change": "涨跌额",
+    })
+    return df
+
+
+# ──────────────────────────────────────────
+# 公司基本信息
+# ──────────────────────────────────────────
+def get_stock_info(symbol: str) -> dict:
+    """获取公司基本信息"""
+    ts_code = _to_ts_code(symbol)
+    info = {}
+
+    df = _ts_query("stock_basic", {
+        "ts_code": ts_code,
+    }, fields="ts_code,symbol,name,area,industry,market,list_date,exchange,fullname")
+
+    if not df.empty:
+        row = df.iloc[0]
+        info["股票代码"] = row.get("ts_code", "")
+        info["股票名称"] = row.get("name", "")
+        info["公司全称"] = row.get("fullname", "")
+        info["所在地区"] = row.get("area", "")
+        info["所属行业"] = row.get("industry", "")
+        info["市场类型"] = row.get("market", "")
+        info["上市日期"] = row.get("list_date", "")
+        info["交易所"] = row.get("exchange", "")
+
+    df2 = _ts_query("stock_company", {
+        "ts_code": ts_code,
+    }, fields="chairman,manager,reg_capital,setup_date,province,city,employees,main_business")
+
+    if not df2.empty:
+        row2 = df2.iloc[0]
+        info["董事长"] = row2.get("chairman", "")
+        info["总经理"] = row2.get("manager", "")
+        info["注册资本(万元)"] = row2.get("reg_capital", "")
+        info["员工人数"] = row2.get("employees", "")
+        main_biz = str(row2.get("main_business", ""))
+        info["主要业务"] = main_biz[:200] if main_biz else ""
+
     return info
 
 
+# ──────────────────────────────────────────
+# 最新行情
+# ──────────────────────────────────────────
+def get_realtime_quote(symbol: str) -> dict:
+    """获取最新行情快照（最近交易日数据）"""
+    ts_code = _to_ts_code(symbol)
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=10)).strftime("%Y%m%d")
+
+    df = _ts_query("daily", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    if df.empty:
+        return {}
+
+    latest = df.sort_values("trade_date", ascending=False).iloc[0]
+
+    # 基本面指标
+    df_basic = _ts_query("daily_basic", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    basic = {}
+    if not df_basic.empty:
+        basic = df_basic.sort_values("trade_date", ascending=False).iloc[0].to_dict()
+
+    # 股票名称
+    name_df = _ts_query("stock_basic", {"ts_code": ts_code}, fields="name")
+    name = name_df.iloc[0]["name"] if not name_df.empty else symbol
+
+    pre_close = latest.get("pre_close", 1) or 1
+    high_val = latest.get("high", 0) or 0
+    low_val = latest.get("low", 0) or 0
+    amplitude = round(((high_val - low_val) / pre_close) * 100, 2) if pre_close else 0
+
+    quote = {
+        "名称": name,
+        "代码": symbol,
+        "最新价": latest.get("close", "--"),
+        "涨跌幅": round(latest.get("pct_chg", 0) or 0, 2),
+        "涨跌额": round(latest.get("change", 0) or 0, 2),
+        "成交量": latest.get("vol", "--"),
+        "成交额": latest.get("amount", "--"),
+        "振幅": amplitude,
+        "最高": latest.get("high", "--"),
+        "最低": latest.get("low", "--"),
+        "今开": latest.get("open", "--"),
+        "昨收": latest.get("pre_close", "--"),
+        "量比": basic.get("volume_ratio", "--"),
+        "换手率": basic.get("turnover_rate", "--"),
+        "市盈率-动态": basic.get("pe_ttm", "--"),
+        "市净率": basic.get("pb", "--"),
+        "总市值": _format_market_cap(basic.get("total_mv")),
+        "流通市值": _format_market_cap(basic.get("circ_mv")),
+    }
+    return quote
+
+
+# ──────────────────────────────────────────
+# 财务数据
+# ──────────────────────────────────────────
 def get_financial_data(symbol: str) -> dict:
-    """获取财务数据"""
+    """获取财务数据：主要指标、利润表、资产负债表"""
+    ts_code = _to_ts_code(symbol)
     result = {}
 
     # 主要财务指标
-    try:
-        df = ak.stock_financial_abstract_ths(symbol=symbol, indicator="按报告期")
-        if df is not None and not df.empty:
-            result["financial_abstract"] = df.head(8)
-    except Exception:
-        pass
+    df = _ts_query("fina_indicator", {
+        "ts_code": ts_code,
+    }, fields="ann_date,end_date,eps,bps,roe,roe_dt,netprofit_yoy,or_yoy,debt_to_assets,grossprofit_margin,netprofit_margin,current_ratio,quick_ratio")
+
+    if not df.empty:
+        df = df.sort_values("end_date", ascending=False).head(8)
+        df = df.rename(columns={
+            "end_date": "报告期", "eps": "每股收益", "bps": "每股净资产",
+            "roe": "ROE(%)", "roe_dt": "ROE(扣非%)",
+            "netprofit_yoy": "净利润同比(%)", "or_yoy": "营收同比(%)",
+            "debt_to_assets": "资产负债率(%)",
+            "grossprofit_margin": "毛利率(%)", "netprofit_margin": "净利率(%)",
+            "current_ratio": "流动比率", "quick_ratio": "速动比率",
+        })
+        df = df.drop(columns=["ann_date"], errors="ignore")
+        result["financial_abstract"] = df
 
     # 利润表
-    try:
-        df = ak.stock_profit_sheet_by_report_em(symbol=symbol)
-        if df is not None and not df.empty:
-            result["profit"] = df.head(4)
-    except Exception:
-        pass
+    df = _ts_query("income", {
+        "ts_code": ts_code,
+    }, fields="end_date,revenue,oper_cost,total_profit,n_income,n_income_attr_p,ebit")
+
+    if not df.empty:
+        df = df.sort_values("end_date", ascending=False).head(4)
+        df = df.rename(columns={
+            "end_date": "报告期", "revenue": "营业总收入",
+            "oper_cost": "营业成本", "total_profit": "利润总额",
+            "n_income": "净利润", "n_income_attr_p": "归母净利润",
+            "ebit": "息税前利润",
+        })
+        for col in ["营业总收入", "营业成本", "利润总额", "净利润", "归母净利润", "息税前利润"]:
+            if col in df.columns:
+                df[col] = df[col].apply(lambda x: _format_yi(x))
+        result["profit"] = df
 
     # 资产负债表
-    try:
-        df = ak.stock_balance_sheet_by_report_em(symbol=symbol)
-        if df is not None and not df.empty:
-            result["balance"] = df.head(4)
-    except Exception:
-        pass
+    df = _ts_query("balancesheet", {
+        "ts_code": ts_code,
+    }, fields="end_date,total_assets,total_liab,total_hldr_eqy_exc_min_int,money_cap,accounts_receiv,inventories,goodwill")
+
+    if not df.empty:
+        df = df.sort_values("end_date", ascending=False).head(4)
+        df = df.rename(columns={
+            "end_date": "报告期", "total_assets": "总资产",
+            "total_liab": "总负债", "total_hldr_eqy_exc_min_int": "归母净资产",
+            "money_cap": "货币资金", "accounts_receiv": "应收账款",
+            "inventories": "存货", "goodwill": "商誉",
+        })
+        for col in ["总资产", "总负债", "归母净资产", "货币资金", "应收账款", "存货", "商誉"]:
+            if col in df.columns:
+                df[col] = df[col].apply(lambda x: _format_yi(x))
+        result["balance"] = df
 
     return result
 
 
-def get_realtime_quote(symbol: str) -> dict:
-    """获取实时行情"""
-    try:
-        df = ak.stock_zh_a_spot_em()
-        row = df[df["代码"] == symbol]
-        if not row.empty:
-            return row.iloc[0].to_dict()
-    except Exception:
-        pass
-    return {}
-
-
+# ──────────────────────────────────────────
+# 资金流向
+# ──────────────────────────────────────────
 def get_money_flow(symbol: str) -> pd.DataFrame:
-    """获取资金流向"""
-    try:
-        df = ak.stock_individual_fund_flow(stock=symbol, market="sh" if symbol.startswith("6") else "sz")
-        return df.tail(20) if not df.empty else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
+    """获取个股资金流向"""
+    ts_code = _to_ts_code(symbol)
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=40)).strftime("%Y%m%d")
+
+    df = _ts_query("moneyflow", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    if df.empty:
+        return df
+
+    df = df.sort_values("trade_date").tail(20)
+    df = df.rename(columns={
+        "trade_date": "日期",
+        "buy_sm_vol": "小单买入(手)",
+        "sell_sm_vol": "小单卖出(手)",
+        "buy_lg_vol": "大单买入(手)",
+        "sell_lg_vol": "大单卖出(手)",
+        "net_mf_vol": "净流入(手)",
+    })
+    keep = ["日期", "小单买入(手)", "小单卖出(手)", "大单买入(手)", "大单卖出(手)", "净流入(手)"]
+    keep = [c for c in keep if c in df.columns]
+    return df[keep].reset_index(drop=True)
 
 
+# ──────────────────────────────────────────
+# 北向资金
+# ──────────────────────────────────────────
+def get_north_flow() -> pd.DataFrame:
+    """获取北向资金近期流向"""
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=40)).strftime("%Y%m%d")
+
+    df = _ts_query("moneyflow_hsgt", {
+        "start_date": start,
+        "end_date": end,
+    })
+    if df.empty:
+        return df
+
+    df = df.sort_values("trade_date").tail(20)
+    df = df.rename(columns={
+        "trade_date": "日期",
+        "north_money": "北向资金(百万)",
+        "south_money": "南向资金(百万)",
+        "ggt_ss": "沪股通(百万)",
+        "ggt_sz": "深股通(百万)",
+    })
+    keep = ["日期", "北向资金(百万)", "南向资金(百万)", "沪股通(百万)", "深股通(百万)"]
+    keep = [c for c in keep if c in df.columns]
+    return df[keep].reset_index(drop=True)
+
+
+# ──────────────────────────────────────────
+# 融资融券
+# ──────────────────────────────────────────
 def get_margin_trading(symbol: str) -> pd.DataFrame:
     """获取融资融券数据"""
-    try:
-        df = ak.stock_margin_detail_szse(date=datetime.now().strftime("%Y%m%d"))
-        if df is not None and not df.empty:
-            row = df[df["证券代码"] == symbol]
-            if not row.empty:
-                return row
-    except Exception:
-        pass
+    ts_code = _to_ts_code(symbol)
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=40)).strftime("%Y%m%d")
 
-    try:
-        df = ak.stock_margin_detail_sse(
-            date=(datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
-        )
-        if df is not None and not df.empty:
-            return df.head(5)
-    except Exception:
-        pass
+    df = _ts_query("margin_detail", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    if df.empty:
+        return df
 
-    return pd.DataFrame()
+    df = df.sort_values("trade_date").tail(15)
+    df = df.rename(columns={
+        "trade_date": "日期",
+        "rzye": "融资余额",
+        "rzmre": "融资买入额",
+        "rzche": "融资偿还额",
+        "rqye": "融券余额",
+        "rqmcl": "融券卖出量(股)",
+        "rqchl": "融券偿还量(股)",
+        "rzrqye": "融资融券余额",
+    })
+    for col in ["融资余额", "融资买入额", "融资偿还额", "融券余额", "融资融券余额"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: _format_yi(x))
+    keep = ["日期", "融资余额", "融资买入额", "融券余额", "融资融券余额"]
+    keep = [c for c in keep if c in df.columns]
+    return df[keep].reset_index(drop=True)
 
 
-def get_north_flow() -> pd.DataFrame:
-    """获取北向资金流向"""
-    try:
-        df = ak.stock_hsgt_north_net_flow_in_em(symbol="北上")
-        return df.tail(20) if not df.empty else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
-
-
+# ──────────────────────────────────────────
+# 新闻 / 公告
+# ──────────────────────────────────────────
 def get_news(symbol: str) -> list:
-    """获取个股相关新闻"""
+    """获取近期新闻（公司公告 + 市场快讯）"""
+    ts_code = _to_ts_code(symbol)
     news_list = []
-    try:
-        df = ak.stock_news_em(symbol=symbol)
-        if df is not None and not df.empty:
-            for _, row in df.head(10).iterrows():
-                news_list.append({
-                    "title": row.get("新闻标题", ""),
-                    "content": row.get("新闻内容", "")[:300],
-                    "time": str(row.get("发布时间", "")),
-                    "source": row.get("文章来源", ""),
-                })
-    except Exception:
-        pass
-    return news_list
+
+    # 公司公告
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+    df = _ts_query("anns", {
+        "ts_code": ts_code,
+        "start_date": start,
+        "end_date": end,
+    })
+    if not df.empty:
+        for _, row in df.head(5).iterrows():
+            news_list.append({
+                "title": str(row.get("title", "")),
+                "content": str(row.get("content", ""))[:300],
+                "time": str(row.get("ann_date", "")),
+                "source": "公司公告",
+            })
+
+    # 新闻快讯
+    start_dt = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    df2 = _ts_query("news", {
+        "src": "sina",
+        "start_date": start_dt,
+        "end_date": end_dt,
+    })
+    if not df2.empty:
+        for _, row in df2.head(10).iterrows():
+            title = str(row.get("title", ""))
+            content = str(row.get("content", ""))[:300]
+            news_list.append({
+                "title": title,
+                "content": content,
+                "time": str(row.get("datetime", "")),
+                "source": "市场快讯",
+            })
+
+    # 去重
+    seen = set()
+    unique = []
+    for n in news_list:
+        if n["title"] and n["title"] not in seen:
+            seen.add(n["title"])
+            unique.append(n)
+    return unique[:10]
 
 
+# ──────────────────────────────────────────
+# 技术指标计算
+# ──────────────────────────────────────────
 def compute_technical_indicators(df: pd.DataFrame) -> dict:
     """基于K线数据计算技术指标"""
-    if df.empty:
+    if df.empty or "收盘" not in df.columns:
         return {}
 
     indicators = {}
@@ -203,6 +509,9 @@ def compute_technical_indicators(df: pd.DataFrame) -> dict:
     return indicators
 
 
+# ──────────────────────────────────────────
+# 统一入口
+# ──────────────────────────────────────────
 def fetch_all_data(symbol: str) -> dict:
     """统一获取所有数据"""
     data = {}

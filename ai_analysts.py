@@ -1,15 +1,20 @@
 """
 AI 交易员辩论分析模块
 4 位不同风格的交易员 + 1 位 Manager 汇总
-使用 gemini-3-pro-low 模型，启用联网搜索，引导深度思考与反思
+使用 gemini-3-flash 模型，启用联网搜索，引导深度思考与反思
 """
 import json
-import requests
 import pandas as pd
+from openai import OpenAI
 
 API_BASE = "https://llm.xiaochisaas.com/v1"
 API_KEY = "sk-FUnXi82lbDPfPZ0uUVJwyWJ1Qse7bFkrr8e0IcX7Ntc1Fooj"
-MODEL = "gemini-3-pro-low"
+MODEL = "gemini-3-flash"
+
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=API_BASE,
+)
 
 # ──────────────────────────────────────────
 # 深度思考与反思框架（注入每位交易员的 system prompt）
@@ -217,61 +222,41 @@ def _build_data_summary(stock_data: dict) -> str:
 
 
 def call_llm(system_prompt: str, user_prompt: str) -> str:
-    """调用 LLM API（启用联网搜索 + 深度思考）"""
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}",
-    }
-
-    payload = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.7,
-        "max_tokens": 2000,
-        # 启用联网搜索
-        "tools": [
-            {
-                "type": "web_search_20250305",
-                "name": "web_search",
-            }
-        ],
-    }
-
+    """调用 LLM API（通过 OpenAI SDK，启用联网搜索 + 深度思考）"""
     try:
-        response = requests.post(
-            f"{API_BASE}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=120,
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=2000,
+            # tools=[
+            #     {
+            #         "type": "web_search_20250305",
+            #         "name": "web_search",
+            #     }
+            # ],
         )
-        response.raise_for_status()
-        data = response.json()
 
-        # 提取所有文本内容
-        choices = data.get("choices", [])
-        if choices:
-            message = choices[0].get("message", {})
-            content = message.get("content", "")
+        # 提取文本内容
+        message = response.choices[0].message
+        content = message.content
 
-            # 兼容 content 为字符串或数组两种格式
-            if isinstance(content, str):
-                return content
-            elif isinstance(content, list):
-                texts = []
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        texts.append(block.get("text", ""))
-                return "\n".join(texts)
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            texts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                elif hasattr(block, "text"):
+                    texts.append(block.text)
+            return "\n".join(texts) if texts else "⚠️ API 返回内容为空"
 
-        return "⚠️ API 返回数据格式异常"
+        return str(content) if content else "⚠️ API 返回内容为空"
 
-    except requests.exceptions.Timeout:
-        return "⚠️ API 请求超时，模型正在深度思考中，请稍后重试"
-    except requests.exceptions.HTTPError as e:
-        return f"⚠️ API HTTP 错误: {e.response.status_code} - {e.response.text[:200]}"
     except Exception as e:
         return f"⚠️ API 调用失败: {str(e)}"
 

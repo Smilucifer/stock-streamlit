@@ -27,18 +27,19 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
 
-/* 全局 */
+/* ── 全局 ── */
 .stApp {
     font-family: 'Noto Sans SC', sans-serif;
+    color: #1A1A2E;
 }
 
-/* 标题区域 */
+/* ── 标题区域 ── */
 .main-header {
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    background: linear-gradient(135deg, #1A1A2E, #2D2D5E, #3A2E6E);
     border-radius: 16px;
     padding: 2rem 2.5rem;
     margin-bottom: 1.5rem;
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid rgba(212,56,13,0.15);
     position: relative;
     overflow: hidden;
 }
@@ -47,7 +48,7 @@ st.markdown("""
     position: absolute;
     top: -50%; left: -50%;
     width: 200%; height: 200%;
-    background: radial-gradient(circle, rgba(230,57,70,0.08) 0%, transparent 60%);
+    background: radial-gradient(circle, rgba(212,56,13,0.08) 0%, transparent 60%);
     animation: pulse 6s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -57,29 +58,29 @@ st.markdown("""
 .main-header h1 {
     font-size: 2rem;
     font-weight: 900;
-    background: linear-gradient(90deg, #E63946, #FF6B6B, #FFE66D);
+    background: linear-gradient(90deg, #FF6B35, #FFD93D, #4ECDC4);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0;
     position: relative;
 }
 .main-header p {
-    color: #8888aa;
+    color: #C0C8E0;
     font-size: 0.9rem;
     margin-top: 0.3rem;
     position: relative;
 }
 
-/* 指标卡片 */
+/* ── 指标卡片 ── */
 .metric-card {
-    background: linear-gradient(145deg, #1a1a2e, #16213e);
-    border: 1px solid rgba(255,255,255,0.05);
+    background: #F5F7FA;
+    border: 1px solid #E0E4EC;
     border-radius: 12px;
     padding: 1rem 1.2rem;
     text-align: center;
 }
 .metric-card .label {
-    color: #6c7293;
+    color: #6B7280;
     font-size: 0.75rem;
     font-weight: 500;
     text-transform: uppercase;
@@ -90,68 +91,111 @@ st.markdown("""
     font-weight: 700;
     margin-top: 0.2rem;
 }
-.up { color: #E63946; }
-.down { color: #2ECC71; }
-.neutral { color: #E8E8ED; }
+.up { color: #D4380D; }
+.down { color: #0B8A3E; }
+.neutral { color: #1A1A2E; }
 
-/* 交易员卡片 */
+/* ── 交易员卡片 ── */
 .trader-card {
-    background: linear-gradient(145deg, #12121c, #1a1a2e);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: #F5F7FA;
+    border: 1px solid #E0E4EC;
     border-radius: 14px;
     padding: 1.5rem;
     margin-bottom: 1rem;
     transition: all 0.3s;
 }
 .trader-card:hover {
-    border-color: rgba(230,57,70,0.3);
-    box-shadow: 0 4px 20px rgba(230,57,70,0.08);
+    border-color: #D4380D;
+    box-shadow: 0 4px 16px rgba(212,56,13,0.1);
 }
 .trader-name {
     font-size: 1.1rem;
     font-weight: 700;
+    color: #B7410E;
     margin-bottom: 0.3rem;
 }
 .trader-style {
-    color: #6c7293;
+    color: #6B7280;
     font-size: 0.8rem;
     margin-bottom: 0.8rem;
 }
 
-/* Manager 卡片 */
+/* ── Manager 卡片 ── */
 .manager-card {
-    background: linear-gradient(145deg, #1a0a0a, #2a1020);
-    border: 2px solid rgba(230,57,70,0.3);
+    background: #FFF8F0;
+    border: 2px solid #D4380D;
     border-radius: 16px;
     padding: 2rem;
     margin-top: 1rem;
+    color: #1A1A2E;
 }
 
-/* 新闻列表 */
+/* ── 新闻列表 ── */
 .news-item {
-    background: rgba(255,255,255,0.02);
-    border-left: 3px solid #E63946;
+    background: #F9FAFB;
+    border-left: 3px solid #D4380D;
     padding: 0.6rem 1rem;
     margin-bottom: 0.5rem;
     border-radius: 0 8px 8px 0;
     font-size: 0.85rem;
+    color: #1A1A2E;
 }
 .news-time {
-    color: #6c7293;
+    color: #6B7280;
     font-size: 0.7rem;
 }
-
-/* 侧边栏 */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0a0a14, #12121e);
+.news-title {
+    color: #1A1A2E;
+    font-weight: 500;
+    margin-top: 0.3rem;
+}
+.news-content {
+    color: #4B5563;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
 }
 
-/* 按钮 */
+/* ── 侧边栏 ── */
+section[data-testid="stSidebar"] {
+    background: #F5F7FA;
+}
+section[data-testid="stSidebar"] .stMarkdown {
+    color: #1A1A2E;
+}
+
+/* ── 按钮 ── */
 .stButton > button {
     border-radius: 10px;
     font-weight: 600;
     padding: 0.6rem 1.5rem;
     transition: all 0.3s;
+}
+
+/* ── Streamlit 内置元素 ── */
+.stTabs [data-baseweb="tab"] {
+    color: #4B5563;
+}
+.stTabs [aria-selected="true"] {
+    color: #D4380D !important;
+}
+.stMarkdown, .stMarkdown p, .stMarkdown li {
+    color: #1A1A2E;
+}
+h1, h2, h3, h4, h5, h6 {
+    color: #1A1A2E !important;
+}
+
+/* metric 组件 */
+[data-testid="stMetricValue"] {
+    color: #1A1A2E !important;
+}
+[data-testid="stMetricLabel"] {
+    color: #4B5563 !important;
+}
+
+/* dataframe */
+.stDataFrame {
+    color: #1A1A2E;
 }
 
 /* 去掉 Streamlit 水印 */
@@ -187,10 +231,11 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ 设置")
     st.caption("模型 API 已内置，无需额外配置。")
+    st.caption("数据源：Tushare（Token 已内置）")
     st.markdown("---")
     st.markdown(
-        "<div style='text-align:center;color:#555;font-size:0.7rem;'>"
-        "Powered by AKShare + LLM<br>仅供学习参考，不构成投资建议</div>",
+        "<div style='text-align:center;color:#6B7280;font-size:0.7rem;'>"
+        "Powered by Tushare + LLM<br>仅供学习参考，不构成投资建议</div>",
         unsafe_allow_html=True,
     )
 
@@ -261,8 +306,8 @@ if st.session_state.stock_data is not None:
 
         st.markdown(f"""
         <div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:0.5rem;">
-            <span style="font-size:1.6rem;font-weight:900;color:#E8E8ED;">{name}</span>
-            <span style="color:#6c7293;font-size:0.9rem;">{sym}</span>
+            <span style="font-size:1.6rem;font-weight:900;color:#1A1A2E;">{name}</span>
+            <span style="color:#6B7280;font-size:0.9rem;">{sym}</span>
             <span class="{css_class}" style="font-size:2rem;font-weight:900;">¥{price}</span>
             <span class="{css_class}" style="font-size:1rem;">{sign}{change_pct}%  ({sign}{change_amt})</span>
         </div>
@@ -305,13 +350,13 @@ if st.session_state.stock_data is not None:
             fig.add_trace(go.Candlestick(
                 x=kline["日期"], open=kline["开盘"], high=kline["最高"],
                 low=kline["最低"], close=kline["收盘"], name="K线",
-                increasing_line_color="#E63946", decreasing_line_color="#2ECC71",
-                increasing_fillcolor="#E63946", decreasing_fillcolor="#2ECC71",
+                increasing_line_color="#D4380D", decreasing_line_color="#0B8A3E",
+                increasing_fillcolor="#D4380D", decreasing_fillcolor="#0B8A3E",
             ), row=1, col=1)
 
             # 均线
             close = kline["收盘"].astype(float)
-            for w, color in [(5, "#FFE66D"), (20, "#4ECDC4"), (60, "#FF6B6B")]:
+            for w, color in [(5, "#E67E22"), (20, "#2980B9"), (60, "#8E44AD")]:
                 ma = close.rolling(w).mean()
                 fig.add_trace(go.Scatter(
                     x=kline["日期"], y=ma, name=f"MA{w}",
@@ -319,7 +364,7 @@ if st.session_state.stock_data is not None:
                 ), row=1, col=1)
 
             # 成交量
-            colors = ["#E63946" if c >= o else "#2ECC71"
+            colors = ["#D4380D" if c >= o else "#0B8A3E"
                       for c, o in zip(kline["收盘"].astype(float), kline["开盘"].astype(float))]
             fig.add_trace(go.Bar(
                 x=kline["日期"], y=kline["成交量"], name="成交量",
@@ -327,17 +372,17 @@ if st.session_state.stock_data is not None:
             ), row=2, col=1)
 
             fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0A0A0F",
-                plot_bgcolor="#0A0A0F",
+                template="plotly_white",
+                paper_bgcolor="#FFFFFF",
+                plot_bgcolor="#FAFBFC",
                 height=550,
                 margin=dict(l=50, r=20, t=30, b=30),
                 xaxis_rangeslider_visible=False,
-                legend=dict(orientation="h", y=1.06),
-                font=dict(family="Noto Sans SC"),
+                legend=dict(orientation="h", y=1.06, font=dict(color="#1A1A2E")),
+                font=dict(family="Noto Sans SC", color="#1A1A2E"),
             )
-            fig.update_xaxes(gridcolor="rgba(255,255,255,0.04)")
-            fig.update_yaxes(gridcolor="rgba(255,255,255,0.04)")
+            fig.update_xaxes(gridcolor="rgba(0,0,0,0.06)", tickfont=dict(color="#4B5563"))
+            fig.update_yaxes(gridcolor="rgba(0,0,0,0.06)", tickfont=dict(color="#4B5563"))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("未获取到K线数据")
@@ -418,8 +463,8 @@ if st.session_state.stock_data is not None:
                 st.markdown(f"""
                 <div class="news-item">
                     <div class="news-time">{n['time']}  ·  {n['source']}</div>
-                    <div style="margin-top:0.3rem;font-weight:500;">{n['title']}</div>
-                    <div style="color:#8888aa;font-size:0.8rem;margin-top:0.2rem;">{n['content'][:200]}</div>
+                    <div class="news-title">{n['title']}</div>
+                    <div class="news-content">{n['content'][:200]}</div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
@@ -446,7 +491,7 @@ if analyze_clicked and st.session_state.stock_data is not None:
     st.markdown("""
     <div style="text-align:center;margin:1.5rem 0;">
         <span style="font-size:1.5rem;font-weight:900;
-        background:linear-gradient(90deg,#E63946,#FFE66D);
+        background:linear-gradient(90deg,#D4380D,#E67E22);
         -webkit-background-clip:text;-webkit-text-fill-color:transparent;">
         🧠 AI 交易团队辩论分析中...
         </span>
@@ -479,7 +524,7 @@ if analyze_clicked and st.session_state.stock_data is not None:
     st.markdown("""
     <div class="manager-card">
         <div style="font-size:1.3rem;font-weight:900;
-        background:linear-gradient(90deg,#E63946,#FF6B6B);
+        background:linear-gradient(90deg,#D4380D,#E67E22);
         -webkit-background-clip:text;-webkit-text-fill-color:transparent;">
         👔 总经理 · 钱总 — 最终决策
         </div>
@@ -492,7 +537,7 @@ if analyze_clicked and st.session_state.stock_data is not None:
 
     st.markdown(f"""
     <div class="manager-card" style="margin-top:0.5rem;">
-        <div style="white-space:pre-wrap;">{manager_result}</div>
+        <div style="white-space:pre-wrap;color:#1A1A2E;">{manager_result}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -502,7 +547,7 @@ elif st.session_state.trader_results and not analyze_clicked:
     st.markdown("---")
     st.markdown(f"""
     <div style="text-align:center;margin:1rem 0;">
-        <span style="font-size:1.2rem;font-weight:700;color:#8888aa;">
+        <span style="font-size:1.2rem;font-weight:700;color:#4B5563;">
         📋 上次分析结果 ({sym})
         </span>
     </div>
@@ -526,10 +571,10 @@ elif st.session_state.trader_results and not analyze_clicked:
         st.markdown(f"""
         <div class="manager-card">
             <div style="font-size:1.3rem;font-weight:900;
-            background:linear-gradient(90deg,#E63946,#FF6B6B);
+            background:linear-gradient(90deg,#D4380D,#E67E22);
             -webkit-background-clip:text;-webkit-text-fill-color:transparent;">
             👔 总经理 · 钱总 — 最终决策
             </div>
-            <div style="white-space:pre-wrap;margin-top:1rem;">{st.session_state.manager_result}</div>
+            <div style="white-space:pre-wrap;margin-top:1rem;color:#1A1A2E;">{st.session_state.manager_result}</div>
         </div>
         """, unsafe_allow_html=True)
