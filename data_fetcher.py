@@ -510,6 +510,38 @@ def compute_technical_indicators(df: pd.DataFrame) -> dict:
 
 
 # ──────────────────────────────────────────
+# 三大指数
+# ──────────────────────────────────────────
+def get_market_indices() -> dict:
+    """获取上证指数、深证成指、创业板指的最新行情"""
+    indices = {}
+    index_map = {
+        "000001.SH": "上证指数",
+        "399001.SZ": "深证成指",
+        "399006.SZ": "创业板指",
+    }
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=10)).strftime("%Y%m%d")
+
+    for ts_code, name in index_map.items():
+        df = _ts_query("index_daily", {
+            "ts_code": ts_code,
+            "start_date": start,
+            "end_date": end,
+        })
+        if not df.empty:
+            latest = df.sort_values("trade_date", ascending=False).iloc[0]
+            indices[name] = {
+                "收盘": latest.get("close", "--"),
+                "涨跌幅": round(latest.get("pct_chg", 0) or 0, 2),
+                "涨跌额": round(latest.get("change", 0) or 0, 2),
+                "成交额(亿)": round((latest.get("amount", 0) or 0) / 1e3, 2),
+                "日期": latest.get("trade_date", "--"),
+            }
+    return indices
+
+
+# ──────────────────────────────────────────
 # 统一入口
 # ──────────────────────────────────────────
 def fetch_all_data(symbol: str) -> dict:
@@ -524,4 +556,5 @@ def fetch_all_data(symbol: str) -> dict:
     data["margin"] = get_margin_trading(symbol)
     data["news"] = get_news(symbol)
     data["technical"] = compute_technical_indicators(data["kline"])
+    data["indices"] = get_market_indices()
     return data

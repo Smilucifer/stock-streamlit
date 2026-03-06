@@ -211,7 +211,7 @@ footer {visibility: hidden;}
 st.markdown("""
 <div class="main-header">
     <h1>📈 A股智能分析 · 多空辩论决策系统</h1>
-    <p>4位 AI 交易员实时辩论 × 量化数据驱动 × 新闻事件分析</p>
+    <p>5位 AI 交易员实时辩论 × 量化数据驱动 × 新闻事件分析</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -328,6 +328,29 @@ if st.session_state.stock_data is not None:
             <div class="metric-card">
                 <div class="label">{label}</div>
                 <div class="value neutral">{val}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── 三大指数 ──
+    indices = data.get("indices", {})
+    if indices:
+        idx_cols = st.columns(3)
+        for col, (idx_name, idx_info) in zip(idx_cols, indices.items()):
+            chg = idx_info.get("涨跌幅", 0)
+            try:
+                chg_val = float(chg)
+                idx_css = "up" if chg_val > 0 else ("down" if chg_val < 0 else "neutral")
+                idx_sign = "+" if chg_val > 0 else ""
+            except (ValueError, TypeError):
+                idx_css = "neutral"
+                idx_sign = ""
+            col.markdown(f"""
+            <div class="metric-card" style="border-left:3px solid {'#D4380D' if idx_css == 'up' else '#0B8A3E' if idx_css == 'down' else '#9CA3AF'};">
+                <div class="label">{idx_name}</div>
+                <div class="value {idx_css}">{idx_info.get('收盘', '--')}</div>
+                <div class="{idx_css}" style="font-size:0.85rem;">{idx_sign}{chg}%  成交额:{idx_info.get('成交额(亿)', '--')}亿</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -498,12 +521,36 @@ if analyze_clicked and st.session_state.stock_data is not None:
     </div>
     """, unsafe_allow_html=True)
 
-    # 4 位交易员并行分析
+    # 5 位交易员分析
     trader_results = {}
-    cols = st.columns(2)
 
-    for idx, (key, profile) in enumerate(TRADER_PROFILES.items()):
-        with cols[idx % 2]:
+    # 第一行：3 位交易员
+    cols_row1 = st.columns(3)
+    trader_keys = list(TRADER_PROFILES.keys())
+
+    for idx in range(3):
+        key = trader_keys[idx]
+        profile = TRADER_PROFILES[key]
+        with cols_row1[idx]:
+            with st.container():
+                st.markdown(f"""
+                <div class="trader-card">
+                    <div class="trader-name">{profile['name']}</div>
+                    <div class="trader-style">{profile['style']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                with st.spinner(f"{profile['name']} 分析中..."):
+                    result = run_trader_analysis(key, data, sym)
+                    trader_results[key] = result
+                    st.markdown(result)
+
+    # 第二行：2 位交易员
+    cols_row2 = st.columns([1, 1, 1])
+    for idx in range(3, 5):
+        key = trader_keys[idx]
+        profile = TRADER_PROFILES[key]
+        with cols_row2[idx - 3]:
             with st.container():
                 st.markdown(f"""
                 <div class="trader-card">
@@ -553,9 +600,15 @@ elif st.session_state.trader_results and not analyze_clicked:
     </div>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(2)
-    for idx, (key, profile) in enumerate(TRADER_PROFILES.items()):
-        with cols[idx % 2]:
+    cols = st.columns(3)
+    trader_keys = list(TRADER_PROFILES.keys())
+    for idx, key in enumerate(trader_keys):
+        profile = TRADER_PROFILES[key]
+        col_idx = idx % 3
+        # Start a new row after 3
+        if idx == 3:
+            cols = st.columns([1, 1, 1])
+        with cols[col_idx if idx < 3 else idx - 3]:
             st.markdown(f"""
             <div class="trader-card">
                 <div class="trader-name">{profile['name']}</div>
