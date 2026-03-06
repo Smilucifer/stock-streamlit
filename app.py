@@ -230,12 +230,19 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### ⚙️ 设置")
+    enable_realtime = st.toggle(
+        "📡 实时K线（AKShare）",
+        value=False,
+        help="开启后将通过 AKShare 获取当日实时分钟级K线并合并到历史数据中。需要在交易时段使用效果最佳。",
+    )
     st.caption("模型 API 已内置，无需额外配置。")
     st.caption("数据源：Tushare（Token 已内置）")
+    if enable_realtime:
+        st.caption("⚡ 实时K线：AKShare（已开启）")
     st.markdown("---")
     st.markdown(
         "<div style='text-align:center;color:#6B7280;font-size:0.7rem;'>"
-        "Powered by Tushare + LLM<br>仅供学习参考，不构成投资建议</div>",
+        "Powered by Tushare + AKShare + LLM<br>仅供学习参考，不构成投资建议</div>",
         unsafe_allow_html=True,
     )
 
@@ -274,8 +281,12 @@ if fetch_clicked:
     st.session_state.trader_results = {}
     st.session_state.manager_result = None
     st.session_state.current_symbol = symbol
-    with st.spinner(f"正在获取 {symbol} 的全量数据，请稍候..."):
-        data = fetch_all_data(symbol)
+    spinner_text = f"正在获取 {symbol} 的全量数据"
+    if enable_realtime:
+        spinner_text += "（含实时K线）"
+    spinner_text += "，请稍候..."
+    with st.spinner(spinner_text):
+        data = fetch_all_data(symbol, enable_realtime_kline=enable_realtime)
         st.session_state.stock_data = data
     st.rerun()
 
@@ -312,6 +323,13 @@ if st.session_state.stock_data is not None:
             <span class="{css_class}" style="font-size:1rem;">{sign}{change_pct}%  ({sign}{change_amt})</span>
         </div>
         """, unsafe_allow_html=True)
+
+        # 实时K线状态提示
+        rt_status = data.get("realtime_kline_status", "未启用")
+        if rt_status == "已合并实时K线数据":
+            st.caption("⚡ 实时K线已合并（数据来源：AKShare）")
+        elif rt_status != "未启用":
+            st.caption(f"⚠️ {rt_status}")
 
         # 指标卡片行
         cols = st.columns(6)

@@ -510,6 +510,68 @@ def compute_technical_indicators(df: pd.DataFrame) -> dict:
 
 
 # ──────────────────────────────────────────
+# 实时K线（通过 akshare，可选）
+# ──────────────────────────────────────────
+def get_realtime_kline_ak(symbol: str) -> pd.DataFrame:
+    """
+    通过 akshare 获取当日实时/分钟级K线，
+    汇总为一条「当日实时」记录，列名与 tushare K线一致。
+    """
+    try:
+        import akshare as ak
+        # 获取当日分钟级数据
+        df = ak.stock_zh_a_hist_min_em(symbol=symbol, period="1", adjust="qfq")
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        # 汇总为一条当日记录
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        df["时间"] = pd.to_datetime(df["时间"])
+        df_today = df[df["时间"].dt.strftime("%Y-%m-%d") == today_str]
+        if df_today.empty:
+            # 可能盘后，取最后一天的数据
+            last_date = df["时间"].dt.strftime("%Y-%m-%d").iloc[-1]
+            df_today = df[df["时间"].dt.strftime("%Y-%m-%d") == last_date]
+
+        if df_today.empty:
+            return pd.DataFrame()
+
+        summary = pd.DataFrame([{
+            "日期": df_today["时间"].dt.strftime("%Y-%m-%d").iloc[-1] + " (实时)",
+            "开盘": float(df_today["开盘"].iloc[0]),
+            "最高": float(df_today["最高"].max()),
+            "最低": float(df_today["最低"].min()),
+            "收盘": float(df_today["收盘"].iloc[-1]),
+            "成交量": float(df_today["成交量"].sum()),
+            "成交额": float(df_today["成交额"].sum()) if "成交额" in df_today.columns else 0,
+        }])
+        return summary
+    except ImportError:
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+def merge_realtime_kline(kline_df: pd.DataFrame, realtime_df: pd.DataFrame) -> pd.DataFrame:
+    """将实时K线追加到历史K线末尾（如果日期不重复）"""
+    if kline_df.empty:
+        return realtime_df
+    if realtime_df.empty:
+        return kline_df
+
+    # 去掉日期中的 " (实时)" 后缀用于比较
+    rt_date_clean = str(realtime_df["日期"].iloc[0]).replace(" (实时)", "")
+    last_hist_date = str(kline_df["日期"].iloc[-1])
+
+    if rt_date_clean == last_hist_date:
+        # 同一天，用实时数据替换最后一行
+        kline_df = kline_df.iloc[:-1]
+
+    merged = pd.concat([kline_df, realtime_df], ignore_index=True)
+    return merged
+
+
+# ──────────────────────────────────────────
 # 三大指数
 # ──────────────────────────────────────────
 def get_market_indices() -> dict:
@@ -544,8 +606,8 @@ def get_market_indices() -> dict:
 # ──────────────────────────────────────────
 # 统一入口
 # ──────────────────────────────────────────
-def fetch_all_data(symbol: str) -> dict:
-    """统一获取所有数据"""
+def fetch_all_data(symbol: str, enable_realtime_kline: bool = False) -> dict:
+    """统一获取所有数据，可选通过 akshare 获取实时K线"""
     data = {}
     data["kline"] = get_stock_kline(symbol)
     data["info"] = get_stock_info(symbol)
@@ -555,6 +617,18 @@ def fetch_all_data(symbol: str) -> dict:
     data["north_flow"] = get_north_flow()
     data["margin"] = get_margin_trading(symbol)
     data["news"] = get_news(symbol)
-    data["technical"] = compute_technical_indicators(data["kline"])
     data["indices"] = get_market_indices()
+
+    # 可选：通过 akshare 获取实时K线并合并
+    if enable_realtime_kline:
+        rt_kline = get_realtime_kline_ak(symbol)
+        if not rt_kline.empty:
+            data["kline"] = merge_realtime_kline(data["kline"], rt_kline)
+            data["realtime_kline_status"] = "已合并实时K线数据"
+        else:
+            data["realtime_kline_status"] = "实时K线获取失败（可能非交易时段）"
+    else:
+        data["realtime_kline_status"] = "未启用"
+
+    data["technical"] = compute_technical_indicators(data["kline"])
     return data
