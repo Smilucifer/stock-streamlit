@@ -510,6 +510,116 @@ def compute_technical_indicators(df: pd.DataFrame) -> dict:
 
 
 # ──────────────────────────────────────────
+# 实时行情（通过 akshare，可选）
+# ──────────────────────────────────────────
+def get_realtime_quote_ak(symbol: str) -> dict:
+    """
+    通过 akshare 获取个股盘中实时行情快照，
+    返回与 get_realtime_quote() 完全一致的字段名。
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot_em()
+        if df is None or df.empty:
+            return {}
+        row = df[df["代码"] == symbol]
+        if row.empty:
+            return {}
+        r = row.iloc[0]
+
+        def _safe(val, default="--"):
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return default
+            return val
+
+        total_mv = _safe(r.get("总市值"), None)
+        circ_mv = _safe(r.get("流通市值"), None)
+
+        quote = {
+            "名称": _safe(r.get("名称")),
+            "代码": symbol,
+            "最新价": _safe(r.get("最新价")),
+            "涨跌幅": round(float(_safe(r.get("涨跌幅"), 0)), 2),
+            "涨跌额": round(float(_safe(r.get("涨跌额"), 0)), 2),
+            "成交量": _safe(r.get("成交量")),
+            "成交额": _safe(r.get("成交额")),
+            "振幅": _safe(r.get("振幅")),
+            "最高": _safe(r.get("最高")),
+            "最低": _safe(r.get("最低")),
+            "今开": _safe(r.get("今开")),
+            "昨收": _safe(r.get("昨收")),
+            "量比": _safe(r.get("量比")),
+            "换手率": _safe(r.get("换手率")),
+            "市盈率-动态": _safe(r.get("市盈率-动态")),
+            "市净率": _safe(r.get("市净率")),
+            "总市值": _format_market_cap_raw(total_mv),
+            "流通市值": _format_market_cap_raw(circ_mv),
+        }
+        return quote
+    except ImportError:
+        return {}
+    except Exception:
+        return {}
+
+
+def _format_market_cap_raw(val):
+    """将元为单位的市值转为可读格式"""
+    if val is None or val == "--":
+        return "--"
+    try:
+        v = float(val)
+        if v >= 1e8:
+            return f"{v / 1e8:.2f}亿"
+        elif v >= 1e4:
+            return f"{v / 1e4:.2f}万"
+        else:
+            return f"{v:.2f}"
+    except (ValueError, TypeError):
+        return "--"
+
+
+def get_market_indices_ak() -> dict:
+    """
+    通过 akshare 获取三大指数的盘中实时行情，
+    返回与 get_market_indices() 完全一致的字段结构。
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_zh_index_spot_em()
+        if df is None or df.empty:
+            return {}
+
+        indices = {}
+        target = {
+            "000001": "上证指数",
+            "399001": "深证成指",
+            "399006": "创业板指",
+        }
+        for code, name in target.items():
+            row = df[df["代码"] == code]
+            if row.empty:
+                continue
+            r = row.iloc[0]
+            close_val = r.get("最新价", 0) or 0
+            chg_pct = r.get("涨跌幅", 0) or 0
+            chg_amt = r.get("涨跌额", 0) or 0
+            amount = r.get("成交额", 0) or 0
+
+            indices[name] = {
+                "收盘": round(float(close_val), 2),
+                "涨跌幅": round(float(chg_pct), 2),
+                "涨跌额": round(float(chg_amt), 2),
+                "成交额(亿)": round(float(amount) / 1e8, 2),
+                "日期": datetime.now().strftime("%Y%m%d") + " (实时)",
+            }
+        return indices
+    except ImportError:
+        return {}
+    except Exception:
+        return {}
+
+
+# ──────────────────────────────────────────
 # 实时K线（通过 akshare，可选）
 # ──────────────────────────────────────────
 def get_realtime_kline_ak(symbol: str) -> pd.DataFrame:
@@ -607,20 +717,46 @@ def get_market_indices() -> dict:
 # 统一入口
 # ──────────────────────────────────────────
 def fetch_all_data(symbol: str, enable_realtime_kline: bool = False) -> dict:
-    """统一获取所有数据，可选通过 akshare 获取实时K线"""
+    """
+    统一获取所有数据。
+    enable_realtime_kline=True 时，通过 AKShare 获取：
+      - 个股盘中实时行情（替换 Tushare 延迟 quote）
+      - 三大指数盘中实时数据（替换 Tushare 延迟 indices）
+      - 当日实时K线（合并到历史K线）
+    其余数据始终走 Tushare。
+    """
     data = {}
+
+    # ── 始终走 Tushare 的数据 ──
     data["kline"] = get_stock_kline(symbol)
     data["info"] = get_stock_info(symbol)
-    data["quote"] = get_realtime_quote(symbol)
     data["financial"] = get_financial_data(symbol)
     data["money_flow"] = get_money_flow(symbol)
     data["north_flow"] = get_north_flow()
     data["margin"] = get_margin_trading(symbol)
     data["news"] = get_news(symbol)
-    data["indices"] = get_market_indices()
 
-    # 可选：通过 akshare 获取实时K线并合并
+    # ── 根据开关选择数据源 ──
     if enable_realtime_kline:
+        # 个股行情：优先 AKShare 实时，失败回退 Tushare
+        ak_quote = get_realtime_quote_ak(symbol)
+        if ak_quote:
+            data["quote"] = ak_quote
+            data["quote_source"] = "AKShare (实时)"
+        else:
+            data["quote"] = get_realtime_quote(symbol)
+            data["quote_source"] = "Tushare (实时获取失败，已回退)"
+
+        # 三大指数：优先 AKShare 实时，失败回退 Tushare
+        ak_indices = get_market_indices_ak()
+        if ak_indices:
+            data["indices"] = ak_indices
+            data["indices_source"] = "AKShare (实时)"
+        else:
+            data["indices"] = get_market_indices()
+            data["indices_source"] = "Tushare (实时获取失败，已回退)"
+
+        # 实时K线合并
         rt_kline = get_realtime_kline_ak(symbol)
         if not rt_kline.empty:
             data["kline"] = merge_realtime_kline(data["kline"], rt_kline)
@@ -628,7 +764,12 @@ def fetch_all_data(symbol: str, enable_realtime_kline: bool = False) -> dict:
         else:
             data["realtime_kline_status"] = "实时K线获取失败（可能非交易时段）"
     else:
+        data["quote"] = get_realtime_quote(symbol)
+        data["quote_source"] = "Tushare"
+        data["indices"] = get_market_indices()
+        data["indices_source"] = "Tushare"
         data["realtime_kline_status"] = "未启用"
 
+    # 技术指标基于最终K线计算（已含实时数据如果有的话）
     data["technical"] = compute_technical_indicators(data["kline"])
     return data

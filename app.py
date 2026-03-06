@@ -231,14 +231,14 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ 设置")
     enable_realtime = st.toggle(
-        "📡 实时K线（AKShare）",
+        "⚡ 实时数据模式（AKShare）",
         value=False,
-        help="开启后将通过 AKShare 获取当日实时分钟级K线并合并到历史数据中。需要在交易时段使用效果最佳。",
+        help="开启后通过 AKShare 获取盘中实时数据：个股实时行情（替换首页价格/涨跌幅等）、三大指数实时数据、当日实时K线合并。交易时段效果最佳。",
     )
     st.caption("模型 API 已内置，无需额外配置。")
     st.caption("数据源：Tushare（Token 已内置）")
     if enable_realtime:
-        st.caption("⚡ 实时K线：AKShare（已开启）")
+        st.caption("⚡ 实时数据模式：AKShare（已开启）")
     st.markdown("---")
     st.markdown(
         "<div style='text-align:center;color:#6B7280;font-size:0.7rem;'>"
@@ -283,7 +283,7 @@ if fetch_clicked:
     st.session_state.current_symbol = symbol
     spinner_text = f"正在获取 {symbol} 的全量数据"
     if enable_realtime:
-        spinner_text += "（含实时K线）"
+        spinner_text += "（含实时行情/指数/K线）"
     spinner_text += "，请稍候..."
     with st.spinner(spinner_text):
         data = fetch_all_data(symbol, enable_realtime_kline=enable_realtime)
@@ -324,12 +324,22 @@ if st.session_state.stock_data is not None:
         </div>
         """, unsafe_allow_html=True)
 
-        # 实时K线状态提示
+        # 数据来源状态提示
         rt_status = data.get("realtime_kline_status", "未启用")
-        if rt_status == "已合并实时K线数据":
-            st.caption("⚡ 实时K线已合并（数据来源：AKShare）")
-        elif rt_status != "未启用":
-            st.caption(f"⚠️ {rt_status}")
+        quote_src = data.get("quote_source", "Tushare")
+        indices_src = data.get("indices_source", "Tushare")
+        if rt_status != "未启用":
+            status_parts = []
+            if "AKShare" in quote_src:
+                status_parts.append("行情实时")
+            if "AKShare" in indices_src:
+                status_parts.append("指数实时")
+            if rt_status == "已合并实时K线数据":
+                status_parts.append("K线已合并")
+            if status_parts:
+                st.caption(f"⚡ 实时模式已开启 — {' / '.join(status_parts)}（数据来源：AKShare）")
+            else:
+                st.caption(f"⚠️ 实时模式已开启但获取失败，当前使用 Tushare 数据")
 
         # 指标卡片行
         cols = st.columns(6)
